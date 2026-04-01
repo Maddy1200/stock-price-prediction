@@ -13,12 +13,13 @@ from xgboost import XGBRegressor
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
 from sklearn.metrics import r2_score, mean_absolute_error
 
-st.title('Stock Price Predictions')
-st.sidebar.info('Welcome to the Stock Price Prediction App.')
-st.sidebar.info("Created by Vikas Sharma")
+st.set_page_config(page_title="Stock Prediction", layout="wide")
+
+st.title('📈 Stock Price Prediction App')
+st.sidebar.info('Stock Prediction using Machine Learning')
 
 # ------------------ DOWNLOAD DATA ------------------
-@st.cache_resource
+@st.cache_data
 def download_data(op, start_date, end_date):
     df = yf.download(op, start=start_date, end=end_date, progress=False)
     df = df.reset_index()
@@ -35,6 +36,11 @@ end_date = st.sidebar.date_input('End Date', today)
 
 data = download_data(option, start_date, end_date)
 
+# Safety check
+if data.empty:
+    st.error("No data found. Try another stock symbol.")
+    st.stop()
+
 scaler = StandardScaler()
 
 # ------------------ MAIN ------------------
@@ -50,23 +56,23 @@ def main():
 
 # ------------------ TECH INDICATORS ------------------
 def tech_indicators():
-    st.header('Technical Indicators')
+    st.header('📊 Technical Indicators')
 
     option = st.radio('Choose Indicator',
-                      ['Close', 'BB', 'MACD', 'RSI', 'SMA', 'EMA'])
+                      ['Close', 'Bollinger Bands', 'MACD', 'RSI', 'SMA', 'EMA'])
 
     df = data.copy()
 
-    # Ensure 1D data
-    close = df['Close'].squeeze()
+    # Ensure numeric & clean
+    df = df[['Close']].dropna()
+    close = df['Close']
 
     # Bollinger Bands
     bb_indicator = BollingerBands(close=close)
     df['bb_h'] = bb_indicator.bollinger_hband()
     df['bb_l'] = bb_indicator.bollinger_lband()
-    bb = df[['Close', 'bb_h', 'bb_l']]
 
-    # Other Indicators
+    # Other indicators
     macd = MACD(close=close).macd()
     rsi = RSIIndicator(close=close).rsi()
     sma = SMAIndicator(close=close, window=14).sma_indicator()
@@ -76,8 +82,8 @@ def tech_indicators():
     if option == 'Close':
         st.line_chart(close)
 
-    elif option == 'BB':
-        st.line_chart(bb)
+    elif option == 'Bollinger Bands':
+        st.line_chart(df[['Close', 'bb_h', 'bb_l']])
 
     elif option == 'MACD':
         st.line_chart(macd)
@@ -93,12 +99,12 @@ def tech_indicators():
 
 # ------------------ SHOW DATA ------------------
 def show_data():
-    st.header('Recent Data')
+    st.header('📋 Recent Data')
     st.dataframe(data.tail(10))
 
 # ------------------ PREDICT ------------------
 def predict():
-    st.header('Prediction')
+    st.header('🔮 Stock Prediction')
 
     model_name = st.radio('Choose Model',
                           ['LinearRegression', 'RandomForest', 'ExtraTrees',
@@ -124,35 +130,31 @@ def predict():
 def run_model(model, num):
     df = data[['Close']].copy()
 
-    # Create prediction column
     df['preds'] = df['Close'].shift(-num)
-
-    # Drop NaN
     df.dropna(inplace=True)
 
-    x = df[['Close']].values
+    X = df[['Close']].values
     y = df['preds'].values
 
-    # Scale
-    x = scaler.fit_transform(x)
+    X = scaler.fit_transform(X)
 
-    x_train, x_test, y_train, y_test = train_test_split(
-        x, y, test_size=0.2, random_state=7)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=7)
 
-    model.fit(x_train, y_train)
+    model.fit(X_train, y_train)
 
-    preds = model.predict(x_test)
+    preds = model.predict(X_test)
 
-    st.write(f"R2 Score: {r2_score(y_test, preds)}")
-    st.write(f"MAE: {mean_absolute_error(y_test, preds)}")
+    st.success(f"R2 Score: {r2_score(y_test, preds):.2f}")
+    st.success(f"MAE: {mean_absolute_error(y_test, preds):.2f}")
 
     # Forecast
-    x_forecast = scaler.transform(data[['Close']].values)[-num:]
-    forecast = model.predict(x_forecast)
+    X_forecast = scaler.transform(data[['Close']].values)[-num:]
+    forecast = model.predict(X_forecast)
 
-    st.subheader("Future Predictions")
+    st.subheader("📅 Future Predictions")
     for i, val in enumerate(forecast, 1):
-        st.write(f"Day {i}: {val}")
+        st.write(f"Day {i}: {round(val, 2)}")
 
 # ------------------ RUN ------------------
 if __name__ == "__main__":
