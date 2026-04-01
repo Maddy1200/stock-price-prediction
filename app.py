@@ -20,13 +20,12 @@ st.sidebar.info('Stock Prediction using Machine Learning')
 
 # ------------------ DOWNLOAD DATA ------------------
 @st.cache_data
-def download_data(op, start_date, end_date):
-    df = yf.download(op, start=start_date, end=end_date, progress=False)
-    df = df.reset_index()
+def download_data(symbol, start, end):
+    df = yf.download(symbol, start=start, end=end, progress=False)
     return df
 
 # ------------------ INPUT ------------------
-option = st.sidebar.text_input('Enter Stock Symbol', value='SPY').upper()
+symbol = st.sidebar.text_input('Enter Stock Symbol', value='SPY').upper()
 
 today = datetime.date.today()
 duration = st.sidebar.number_input('Enter duration (days)', value=3000)
@@ -34,22 +33,21 @@ duration = st.sidebar.number_input('Enter duration (days)', value=3000)
 start_date = st.sidebar.date_input('Start Date', today - datetime.timedelta(days=duration))
 end_date = st.sidebar.date_input('End Date', today)
 
-data = download_data(option, start_date, end_date)
+data = download_data(symbol, start_date, end_date)
 
-# Safety check
 if data.empty:
-    st.error("No data found. Try another stock symbol.")
+    st.error("No data found. Try another symbol.")
     st.stop()
 
 scaler = StandardScaler()
 
 # ------------------ MAIN ------------------
 def main():
-    choice = st.sidebar.selectbox('Menu', ['Visualize', 'Recent Data', 'Predict'])
+    menu = st.sidebar.selectbox('Menu', ['Visualize', 'Recent Data', 'Predict'])
 
-    if choice == 'Visualize':
+    if menu == 'Visualize':
         tech_indicators()
-    elif choice == 'Recent Data':
+    elif menu == 'Recent Data':
         show_data()
     else:
         predict()
@@ -62,15 +60,22 @@ def tech_indicators():
                       ['Close', 'Bollinger Bands', 'MACD', 'RSI', 'SMA', 'EMA'])
 
     df = data.copy()
-
-    # Ensure numeric & clean
     df = df[['Close']].dropna()
-    close = df['Close']
+
+    # ✅ FIX: Ensure 1D series
+    close = df['Close'].values.flatten()
+    close = pd.Series(close)
 
     # Bollinger Bands
     bb_indicator = BollingerBands(close=close)
-    df['bb_h'] = bb_indicator.bollinger_hband()
-    df['bb_l'] = bb_indicator.bollinger_lband()
+    bb_h = bb_indicator.bollinger_hband()
+    bb_l = bb_indicator.bollinger_lband()
+
+    bb_df = pd.DataFrame({
+        'Close': close,
+        'BB High': bb_h,
+        'BB Low': bb_l
+    })
 
     # Other indicators
     macd = MACD(close=close).macd()
@@ -83,7 +88,7 @@ def tech_indicators():
         st.line_chart(close)
 
     elif option == 'Bollinger Bands':
-        st.line_chart(df[['Close', 'bb_h', 'bb_l']])
+        st.line_chart(bb_df)
 
     elif option == 'MACD':
         st.line_chart(macd)
@@ -159,3 +164,4 @@ def run_model(model, num):
 # ------------------ RUN ------------------
 if __name__ == "__main__":
     main()
+    
